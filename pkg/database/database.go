@@ -15,12 +15,14 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-var DB *gorm.DB
-var DBConnection *sql.DB
-
 var ErrDBConnectionFailed = errors.New("db connection was failed")
 
-func Setup(cfg *config.DatabaseConfig) {
+type Database struct {
+	Gorm *gorm.DB
+	SQL  *sql.DB
+}
+
+func Setup(cfg *config.DatabaseConfig) (*Database, error) {
 	var err error
 
 	p, err := strconv.Atoi(cfg.Port)
@@ -36,31 +38,33 @@ func Setup(cfg *config.DatabaseConfig) {
 		gormCfg = &gorm.Config{Logger: logger.Default.LogMode(logger.Info)}
 	}
 
-	DB, err = gorm.Open(postgres.Open(dsn), gormCfg)
+	db, err := gorm.Open(postgres.Open(dsn), gormCfg)
 
-	if DB.Error != nil || err != nil {
-		slog.Error("[SQL] ErrorDBConnectionFailed", "error", ErrDBConnectionFailed)
-		panic(ErrDBConnectionFailed)
+	if db.Error != nil || err != nil {
+		slog.Error("[SQL] ErrorDBConnectionFailed", "error", err)
+		return nil, ErrDBConnectionFailed
 	}
 
-	DBConnection, err = DB.DB()
+	sqlDB, err := db.DB()
 	if err != nil {
-		slog.Error("[SQL] ErrorDBConnectionFailed", "error", ErrDBConnectionFailed)
-		panic(ErrDBConnectionFailed)
+		slog.Error("[SQL] ErrorDBConnectionFailed", "error", err)
+		return nil, ErrDBConnectionFailed
 	}
 
 	var ping bool
-	DB.Raw("select 1").Scan(&ping)
+	db.Raw("select 1").Scan(&ping)
 	if !ping {
-		slog.Error("[SQL] db connection was failed", "error", ErrDBConnectionFailed)
-		panic(ErrDBConnectionFailed)
+		slog.Error("[SQL] db connection was failed", "error", err)
+		return nil, ErrDBConnectionFailed
 	}
 
 	slog.Info("[SQL]", "message", "connection was successfully opened to database")
+
+	return &Database{Gorm: db, SQL: sqlDB}, nil
 }
 
-func EnsureMigrations(migrations []*gormigrate.Migration) {
-	m := gormigrate.New(DB, &gormigrate.Options{
+func (d *Database) EnsureMigrations(migrations []*gormigrate.Migration) error {
+	m := gormigrate.New(d.Gorm, &gormigrate.Options{
 		TableName:                 "gorm_migrations",
 		IDColumnName:              "id",
 		IDColumnSize:              512,
@@ -70,8 +74,9 @@ func EnsureMigrations(migrations []*gormigrate.Migration) {
 
 	if err := m.Migrate(); err != nil {
 		slog.Error("[SQL] could not migrate", "err", err)
-		panic(err)
+		return err
 	}
 
 	slog.Info("[SQL]", "message", "migration did run successfully")
+	return nil
 }

@@ -13,10 +13,13 @@ import (
 
 const successStatus = "PONG"
 
-var Client *redis.Client
 var ErrRedisClientConnectionFailed = errors.New("[CACHE] redis client connection was failed")
 
-func Setup(ctx context.Context, cfg config.RedisConfig) {
+type Rdb struct {
+	Client *redis.Client
+}
+
+func Setup(ctx context.Context, cfg config.RedisConfig) (*Rdb, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.RedisHost,
 		Password: "",
@@ -24,13 +27,13 @@ func Setup(ctx context.Context, cfg config.RedisConfig) {
 		PoolSize: 1,
 	})
 
-	Client = rdb
-
-	status := Client.Ping(ctx)
+	status := rdb.Ping(ctx)
 
 	if status.Val() != successStatus {
 		slog.Error("[CACHE]", "error", ErrRedisClientConnectionFailed)
+		return nil, ErrRedisClientConnectionFailed
 	}
 
 	slog.Info("[CACHE]", "message", fmt.Sprintf("redis status %s", status))
+	return &Rdb{Client: rdb}, nil
 }

@@ -21,20 +21,25 @@ func main() {
 	cfg := config.LoadConfig(".")
 	slog.Info("[APP]", "message", "current env: "+cfg.App.Env)
 
-	database.Setup(&cfg.Database)
-	database.EnsureMigrations(database.Migrations)
+	var err error
+	dbConnection, err := database.Setup(&cfg.Database)
+	checkError(err)
+
+	err = dbConnection.EnsureMigrations(database.Migrations)
+	checkError(err)
+
+	rdb, err := redis.Setup(context.TODO(), cfg.Redis)
+	checkError(err)
 
 	api.ServePublicServer(cfg.Server)
 	api.ServeAPIDocs(cfg.Server)
 
-	redis.Setup(context.TODO(), cfg.Redis)
-
 	gracefulShutdown(
 		func() error {
-			return database.DBConnection.Close()
+			return dbConnection.SQL.Close()
 		},
 		func() error {
-			return redis.Client.Close()
+			return rdb.Client.Close()
 		},
 		func() error {
 			os.Exit(0)
@@ -53,5 +58,11 @@ func gracefulShutdown(ops ...func() error) {
 				panic(err)
 			}
 		}
+	}
+}
+
+func checkError(err error) {
+	if err != nil {
+		panic(err)
 	}
 }
