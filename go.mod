@@ -1,6 +1,6 @@
 module go-boilerplate
 
-go 1.24.4
+go 1.25
 
 require (
 	github.com/flowchartsman/swaggerui v0.0.0-20221017034628-909ed4f3701b
