@@ -32,7 +32,6 @@ func main() {
 	checkError(err)
 
 	api.ServePublicServer(cfg.Server)
-	api.ServeAPIDocs(cfg.Server)
 
 	gracefulShutdown(
 		func() error {
